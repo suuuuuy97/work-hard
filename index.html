@@ -333,6 +333,8 @@ body::before{
 
   font-size:14px;
 
+  line-height:1.7;
+
 }
 
 .risk{
@@ -460,7 +462,7 @@ body::before{
       </h1>
 
       <p>
-        AI 기반 사업소 비용 관제 시스템
+        AI 기반 사업소 손익 분석 시스템
       </p>
 
     </div>
@@ -491,7 +493,7 @@ body::before{
       />
 
       <p>
-        업로드 즉시 AI 분석 시작
+        업로드 즉시 사업소별 손익 자동 분석
       </p>
 
     </div>
@@ -501,6 +503,21 @@ body::before{
   <!-- KPI -->
 
   <div class="grid-4">
+
+    <div class="card">
+
+      <div class="card-title">
+        TOTAL SALES
+      </div>
+
+      <div
+        class="kpi blue"
+        id="totalSales"
+      >
+        ₩0
+      </div>
+
+    </div>
 
     <div class="card">
 
@@ -535,29 +552,14 @@ body::before{
     <div class="card">
 
       <div class="card-title">
-        TOP COST CENTER
-      </div>
-
-      <div
-        class="kpi blue"
-        id="topSite"
-      >
-        -
-      </div>
-
-    </div>
-
-    <div class="card">
-
-      <div class="card-title">
-        RISK LEVEL
+        TOP PROFIT SITE
       </div>
 
       <div
         class="kpi orange"
-        id="riskLevel"
+        id="topSite"
       >
-        LOW
+        -
       </div>
 
     </div>
@@ -578,7 +580,7 @@ body::before{
     <div class="card">
 
       <div class="card-title">
-        사업소 비용 비중
+        사업소별 비용 비중
       </div>
 
       <div class="chart-box">
@@ -590,7 +592,7 @@ body::before{
     <div class="card">
 
       <div class="card-title">
-        계정과목 분석
+        계정과목별 비용
       </div>
 
       <div class="chart-box">
@@ -645,7 +647,7 @@ body::before{
             margin-top:8px;
           "
         >
-          사업소 상세 비용 분석
+          사업소 상세 분석
         </div>
 
       </div>
@@ -710,6 +712,8 @@ let rawRows = [];
 let siteChart;
 let categoryChart;
 
+let globalSiteMap = {};
+
 document
 .getElementById("excelFile")
 .addEventListener("change",handleFile);
@@ -753,41 +757,43 @@ function analyze(rows){
   const siteMap = {};
   const categoryMap = {};
 
+  let totalSales = 0;
   let totalCost = 0;
 
-  /* 
-     현재 엑셀 구조 대응
-
-     8행 : 사업소명
-     11행 이후 : 비용 데이터
-
-     B열 = 계정과목
-     C열 이후 = 사업소별 금액
+  /*
+    8행 = 사업소명
+    11행 = 프로젝트명
   */
 
-  const headerRow = rows[7];
+  const siteHeader = rows[7];
+  const projectHeader = rows[10];
 
-  if(!headerRow){
+  if(!siteHeader){
 
     alert("사업소 헤더를 찾지 못했습니다.");
     return;
 
   }
 
-  const siteColumns = [];
+  const projectColumns = [];
 
-  headerRow.forEach((value,index)=>{
+  siteHeader.forEach((site,index)=>{
+
+    const project =
+      projectHeader?.[index];
 
     if(
       index >= 2 &&
-      value &&
-      value !== "합계"
+      site &&
+      project &&
+      site !== "합계"
     ){
 
-      siteColumns.push({
+      projectColumns.push({
 
         index,
-        site:value
+        site,
+        project
 
       });
 
@@ -795,12 +801,30 @@ function analyze(rows){
 
   });
 
-  rows.slice(10).forEach(row=>{
+  /*
+    데이터 영역
+  */
+
+  rows.slice(11).forEach(row=>{
 
     const category =
       row[1] || "기타";
 
-    siteColumns.forEach(col=>{
+    const categoryText =
+      String(category);
+
+    /*
+      매출 여부 자동판단
+    */
+
+    const isSales =
+
+      categoryText.includes("매출") ||
+      categoryText.includes("수익") ||
+      categoryText.includes("용역") ||
+      categoryText.includes("매 출");
+
+    projectColumns.forEach(col=>{
 
       const raw = row[col.index];
 
@@ -811,17 +835,47 @@ function analyze(rows){
 
       );
 
-      if(!isNaN(amount) && amount > 0){
+      if(!isNaN(amount) && amount !== 0){
 
-        totalCost += amount;
+        if(!siteMap[col.site]){
 
-        siteMap[col.site] =
-          (siteMap[col.site] || 0)
-          + amount;
+          siteMap[col.site] = {
 
-        categoryMap[category] =
-          (categoryMap[category] || 0)
-          + amount;
+            sales:0,
+            cost:0,
+            profit:0,
+            rate:0
+
+          };
+
+        }
+
+        /*
+          매출
+        */
+
+        if(isSales){
+
+          siteMap[col.site].sales += amount;
+          totalSales += amount;
+
+        }
+
+        /*
+          비용
+        */
+
+        else{
+
+          siteMap[col.site].cost += amount;
+          totalCost += amount;
+
+          categoryMap[category] =
+
+            (categoryMap[category] || 0)
+            + amount;
+
+        }
 
       }
 
@@ -829,57 +883,102 @@ function analyze(rows){
 
   });
 
-  const sales = 39460430239;
-
-  const profitRate =
-    ((sales-totalCost)/sales)*100;
-
-  let topSite = "";
-  let max = 0;
+  /*
+    수익 계산
+  */
 
   for(let site in siteMap){
 
-    if(siteMap[site] > max){
+    const data = siteMap[site];
 
-      max = siteMap[site];
+    data.profit =
+      data.sales - data.cost;
+
+    data.rate =
+
+      data.sales > 0
+
+      ?
+
+      (
+        data.profit /
+        data.sales
+      ) * 100
+
+      :
+
+      0;
+
+  }
+
+  globalSiteMap = siteMap;
+
+  /*
+    TOP 사업소
+  */
+
+  let topSite = "-";
+  let maxProfit = -999999999;
+
+  for(let site in siteMap){
+
+    if(siteMap[site].profit > maxProfit){
+
+      maxProfit =
+        siteMap[site].profit;
+
       topSite = site;
 
     }
 
   }
 
-  let riskLevel = "LOW";
+  /*
+    전체 수익률
+  */
 
-  if(profitRate < 15){
+  const totalProfit =
+    totalSales - totalCost;
 
-    riskLevel = "HIGH";
+  const totalRate =
 
-  }else if(profitRate < 25){
+    totalSales > 0
 
-    riskLevel = "MEDIUM";
+    ?
 
-  }
+    (totalProfit / totalSales) * 100
+
+    :
+
+    0;
+
+  /*
+    KPI
+  */
+
+  document
+  .getElementById("totalSales")
+  .innerText =
+
+    "₩"+Math.round(totalSales)
+      .toLocaleString();
 
   document
   .getElementById("totalCost")
   .innerText =
+
     "₩"+Math.round(totalCost)
       .toLocaleString();
 
   document
   .getElementById("profitRate")
   .innerText =
-    profitRate.toFixed(1)+"%";
+
+    totalRate.toFixed(1)+"%";
 
   document
   .getElementById("topSite")
-  .innerText =
-    topSite;
-
-  document
-  .getElementById("riskLevel")
-  .innerText =
-    riskLevel;
+  .innerText = topSite;
 
   renderSiteCards(siteMap);
 
@@ -891,7 +990,7 @@ function analyze(rows){
   renderAI(
     categoryMap,
     topSite,
-    profitRate
+    totalRate
   );
 
 }
@@ -903,22 +1002,21 @@ function renderSiteCards(siteMap){
 
   wrap.innerHTML = "";
 
-  const max =
-    Math.max(...Object.values(siteMap));
-
   for(let site in siteMap){
 
-    const cost = siteMap[site];
+    const data = siteMap[site];
 
     let risk = "LOW";
     let riskClass = "low";
 
-    if(cost > max * 0.7){
+    if(data.rate < 5){
 
       risk = "HIGH";
       riskClass = "high";
 
-    }else if(cost > max * 0.4){
+    }
+
+    else if(data.rate < 15){
 
       risk = "MEDIUM";
       riskClass = "medium";
@@ -930,8 +1028,7 @@ function renderSiteCards(siteMap){
       <div
         class="site-card"
         onclick="openDetail(
-          '${site}',
-          ${cost}
+          '${site}'
         )"
       >
 
@@ -940,12 +1037,27 @@ function renderSiteCards(siteMap){
         </div>
 
         <div class="site-cost">
-          ₩${Math.round(cost)
-            .toLocaleString()}
+          ${data.rate.toFixed(1)}%
         </div>
 
         <div class="site-sub">
-          AI Cost Monitoring
+
+          매출 :
+          ₩${Math.round(data.sales)
+            .toLocaleString()}
+
+          <br><br>
+
+          비용 :
+          ₩${Math.round(data.cost)
+            .toLocaleString()}
+
+          <br><br>
+
+          수익 :
+          ₩${Math.round(data.profit)
+            .toLocaleString()}
+
         </div>
 
         <div
@@ -984,7 +1096,8 @@ function renderCharts(
 
         datasets:[{
 
-          data:Object.values(siteMap),
+          data:Object.values(siteMap)
+            .map(v=>v.cost),
 
           backgroundColor:[
             "#3b82f6",
@@ -1061,7 +1174,7 @@ function renderCharts(
 function renderAI(
   categoryMap,
   topSite,
-  profitRate
+  totalRate
 ){
 
   const insights =
@@ -1099,20 +1212,20 @@ function renderAI(
     <div class="ai-box ai-alert">
 
       ${topSite}
-      비용 집중도가 높습니다.
+      수익 기여도가 가장 높습니다.
 
     </div>
 
   `;
 
-  if(profitRate < 80){
+  if(totalRate < 10){
 
     insights.innerHTML += `
 
       <div class="ai-box ai-alert">
 
-        목표 수익률 대비
-        비용 통제가 필요합니다.
+        수익률이 낮습니다.
+        비용 통제 필요.
 
       </div>
 
@@ -1124,7 +1237,7 @@ function renderAI(
 
       <div class="ai-box">
 
-        현재 비용 구조 안정적
+        현재 수익 구조 안정적
 
       </div>
 
@@ -1134,7 +1247,10 @@ function renderAI(
 
 }
 
-function openDetail(site,cost){
+function openDetail(site){
+
+  const data =
+    globalSiteMap[site];
 
   document
   .getElementById("detailPanel")
@@ -1144,11 +1260,11 @@ function openDetail(site,cost){
   .getElementById("detailTitle")
   .innerText = site;
 
-  const headerRow = rawRows[7];
+  const siteHeader = rawRows[7];
 
   let targetIndex = null;
 
-  headerRow.forEach((value,index)=>{
+  siteHeader.forEach((value,index)=>{
 
     if(value === site){
 
@@ -1160,7 +1276,7 @@ function openDetail(site,cost){
 
   let detailHtml = "";
 
-  rawRows.slice(10).forEach(row=>{
+  rawRows.slice(11).forEach(row=>{
 
     const category = row[1];
 
@@ -1202,20 +1318,26 @@ function openDetail(site,cost){
   .innerHTML = `
 
     <div class="detail-item">
-      ⚠ ${site} 비용 집중도 높음
+      매출 :
+      ₩${Math.round(data.sales)
+        .toLocaleString()}
     </div>
 
     <div class="detail-item">
-      상위 계정과목 중심 예산 통제 필요
+      비용 :
+      ₩${Math.round(data.cost)
+        .toLocaleString()}
     </div>
 
     <div class="detail-item">
-      AI 예측 :
-      다음달 비용 증가 가능성 존재
+      수익 :
+      ₩${Math.round(data.profit)
+        .toLocaleString()}
     </div>
 
     <div class="detail-item">
-      외주비/유지비 집중 모니터링 권장
+      수익률 :
+      ${data.rate.toFixed(1)}%
     </div>
 
   `;
