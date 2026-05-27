@@ -5,7 +5,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-<title>캡스 손익 분석 가즈아!</title>
+<title>캡스 손익분석 가즈아~!</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
@@ -226,6 +226,34 @@ body::before{
 
   margin-top:14px;
   color:#94a3b8;
+
+}
+
+/* BUTTON */
+
+.action-btn{
+
+  border:none;
+
+  background:#1d4ed8;
+
+  color:white;
+
+  padding:12px 18px;
+
+  border-radius:12px;
+
+  cursor:pointer;
+
+  font-weight:700;
+
+  transition:0.2s;
+
+}
+
+.action-btn:hover{
+
+  opacity:0.9;
 
 }
 
@@ -461,7 +489,7 @@ body::before{
       </h1>
 
       <p>
-        캡스 손익 분석, 마이너스는 죽음뿐.
+        수익률 절대지켜, 마이너스는 죽음뿐.
       </p>
 
     </div>
@@ -494,6 +522,15 @@ body::before{
       <p>
         사업소 손익 엑셀 업로드
       </p>
+
+      <br>
+
+      <button
+        class="action-btn"
+        onclick="resetDashboard()"
+      >
+        데이터 초기화
+      </button>
 
     </div>
 
@@ -572,7 +609,7 @@ body::before{
     id="siteCards"
   ></div>
 
-  <!-- 상세 페이지 -->
+  <!-- 상세페이지 -->
 
   <div
     id="detailPage"
@@ -614,14 +651,7 @@ body::before{
 
         onclick="closeDetail()"
 
-        style="
-          border:none;
-          background:#1e293b;
-          color:white;
-          padding:12px 18px;
-          border-radius:12px;
-          cursor:pointer;
-        "
+        class="action-btn"
 
       >
         닫기
@@ -629,7 +659,7 @@ body::before{
 
     </div>
 
-    <!-- 사업소 KPI -->
+    <!-- KPI -->
 
     <div class="grid-4">
 
@@ -737,7 +767,7 @@ body::before{
 
     </div>
 
-    <!-- 계정원장 업로드 -->
+    <!-- 계정원장 -->
 
     <div class="card">
 
@@ -756,7 +786,7 @@ body::before{
 
     </div>
 
-    <!-- AI 분석 -->
+    <!-- 분석 -->
 
     <div id="ledgerAnalysis"></div>
 
@@ -829,6 +859,12 @@ function toEok(value){
 
 }
 
+/*
+========================================
+이벤트
+========================================
+*/
+
 document
 .getElementById("excelFile")
 .addEventListener("change",handleFile);
@@ -836,6 +872,50 @@ document
 document
 .getElementById("ledgerFile")
 .addEventListener("change",handleLedgerFile);
+
+/*
+========================================
+새로고침 복구
+========================================
+*/
+
+window.addEventListener(
+  "load",
+  ()=>{
+
+    const saved = localStorage.getItem(
+      "financialDashboardData"
+    );
+
+    if(saved){
+
+      const parsed =
+        JSON.parse(saved);
+
+      rawRows = parsed;
+
+      analyze(parsed);
+
+    }
+
+  }
+);
+
+/*
+========================================
+초기화
+========================================
+*/
+
+function resetDashboard(){
+
+  localStorage.removeItem(
+    "financialDashboardData"
+  );
+
+  location.reload();
+
+}
 
 /*
 ========================================
@@ -868,6 +948,15 @@ function handleFile(e){
       });
 
     rawRows = json;
+
+    /*
+      저장
+    */
+
+    localStorage.setItem(
+      "financialDashboardData",
+      JSON.stringify(json)
+    );
 
     analyze(json);
 
@@ -941,7 +1030,6 @@ function analyze(rows){
 
   /*
     매출액
-    12행
   */
 
   const salesRow = rows[11];
@@ -962,7 +1050,6 @@ function analyze(rows){
 
   /*
     비용
-    13~68행
   */
 
   rows.slice(12,68).forEach(row=>{
@@ -989,7 +1076,6 @@ function analyze(rows){
 
   /*
     영업이익
-    69행
   */
 
   const profitRow = rows[68];
@@ -1188,6 +1274,10 @@ function renderCharts(siteMap){
       b[1].cost - a[1].cost
     );
 
+  /*
+    비용 차트
+  */
+
   siteChart = new Chart(
     document.getElementById("siteChart"),
     {
@@ -1221,6 +1311,10 @@ function renderCharts(siteMap){
 
     }
   );
+
+  /*
+    영업이익 차트
+  */
 
   profitChart = new Chart(
     document.getElementById("profitChart"),
