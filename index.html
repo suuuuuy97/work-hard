@@ -5,7 +5,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-<title>AI Financial Intelligence</title>
+<title>AI Financial Intelligence Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
@@ -32,20 +32,19 @@ body::before{
   content:"";
 
   position:fixed;
-
   inset:0;
 
   background:
 
     radial-gradient(
       circle at top left,
-      rgba(37,99,235,0.16),
+      rgba(37,99,235,0.15),
       transparent 28%
     ),
 
     radial-gradient(
       circle at bottom right,
-      rgba(59,130,246,0.14),
+      rgba(59,130,246,0.12),
       transparent 30%
     );
 
@@ -412,37 +411,6 @@ body::before{
 
 }
 
-/* TABLE */
-
-table{
-
-  width:100%;
-  border-collapse:collapse;
-
-}
-
-th,td{
-
-  padding:14px;
-
-  border-bottom:
-    1px solid rgba(255,255,255,0.06);
-
-}
-
-th{
-
-  color:#94a3b8;
-  text-align:left;
-
-}
-
-.table-wrap{
-  overflow:auto;
-}
-
-/* MOBILE */
-
 @media(max-width:1300px){
 
   .grid-4{
@@ -766,7 +734,9 @@ function handleFile(e){
       ];
 
     const json =
-      XLSX.utils.sheet_to_json(sheet);
+      XLSX.utils.sheet_to_json(sheet,{
+        header:1
+      });
 
     rawRows = json;
 
@@ -785,35 +755,73 @@ function analyze(rows){
 
   let totalCost = 0;
 
-  rows.forEach(row=>{
+  /* 
+     현재 엑셀 구조 대응
+
+     8행 : 사업소명
+     11행 이후 : 비용 데이터
+
+     B열 = 계정과목
+     C열 이후 = 사업소별 금액
+  */
+
+  const headerRow = rows[7];
+
+  if(!headerRow){
+
+    alert("사업소 헤더를 찾지 못했습니다.");
+    return;
+
+  }
+
+  const siteColumns = [];
+
+  headerRow.forEach((value,index)=>{
+
+    if(
+      index >= 2 &&
+      value &&
+      value !== "합계"
+    ){
+
+      siteColumns.push({
+
+        index,
+        site:value
+
+      });
+
+    }
+
+  });
+
+  rows.slice(10).forEach(row=>{
 
     const category =
-      row["계정과목"] || "기타";
+      row[1] || "기타";
 
-    Object.keys(row).forEach(key=>{
+    siteColumns.forEach(col=>{
 
-      if(key !== "계정과목"){
+      const raw = row[col.index];
 
-        const amount =
-          Number(
-            String(
-              row[key] || 0
-            ).replace(/,/g,"")
-          );
+      const amount = Number(
 
-        if(!isNaN(amount)){
+        String(raw || 0)
+        .replace(/,/g,"")
 
-          totalCost += amount;
+      );
 
-          siteMap[key] =
-            (siteMap[key] || 0)
-            + amount;
+      if(!isNaN(amount) && amount > 0){
 
-          categoryMap[category] =
-            (categoryMap[category] || 0)
-            + amount;
+        totalCost += amount;
 
-        }
+        siteMap[col.site] =
+          (siteMap[col.site] || 0)
+          + amount;
+
+        categoryMap[category] =
+          (categoryMap[category] || 0)
+          + amount;
 
       }
 
@@ -821,7 +829,7 @@ function analyze(rows){
 
   });
 
-  const sales = 500000000;
+  const sales = 39460430239;
 
   const profitRate =
     ((sales-totalCost)/sales)*100;
@@ -842,11 +850,11 @@ function analyze(rows){
 
   let riskLevel = "LOW";
 
-  if(profitRate < 80){
+  if(profitRate < 15){
 
     riskLevel = "HIGH";
 
-  }else if(profitRate < 90){
+  }else if(profitRate < 25){
 
     riskLevel = "MEDIUM";
 
@@ -855,7 +863,8 @@ function analyze(rows){
   document
   .getElementById("totalCost")
   .innerText =
-    "₩"+totalCost.toLocaleString();
+    "₩"+Math.round(totalCost)
+      .toLocaleString();
 
   document
   .getElementById("profitRate")
@@ -931,7 +940,8 @@ function renderSiteCards(siteMap){
         </div>
 
         <div class="site-cost">
-          ₩${cost.toLocaleString()}
+          ₩${Math.round(cost)
+            .toLocaleString()}
         </div>
 
         <div class="site-sub">
@@ -1134,19 +1144,33 @@ function openDetail(site,cost){
   .getElementById("detailTitle")
   .innerText = site;
 
+  const headerRow = rawRows[7];
+
+  let targetIndex = null;
+
+  headerRow.forEach((value,index)=>{
+
+    if(value === site){
+
+      targetIndex = index;
+
+    }
+
+  });
+
   let detailHtml = "";
 
-  rawRows.forEach(row=>{
+  rawRows.slice(10).forEach(row=>{
 
-    const category =
-      row["계정과목"];
+    const category = row[1];
 
-    const amount =
-      Number(
-        String(
-          row[site] || 0
-        ).replace(/,/g,"")
-      );
+    const amount = Number(
+
+      String(
+        row[targetIndex] || 0
+      ).replace(/,/g,"")
+
+    );
 
     if(amount > 0){
 
@@ -1157,7 +1181,8 @@ function openDetail(site,cost){
           ${category}
 
           :
-          ₩${amount.toLocaleString()}
+          ₩${Math.round(amount)
+            .toLocaleString()}
 
         </div>
 
@@ -1177,20 +1202,20 @@ function openDetail(site,cost){
   .innerHTML = `
 
     <div class="detail-item">
-      ⚠ 비용 증가 패턴 감지
+      ⚠ ${site} 비용 집중도 높음
     </div>
 
     <div class="detail-item">
-      외주비 비중 증가 추세
+      상위 계정과목 중심 예산 통제 필요
     </div>
 
     <div class="detail-item">
-      예산 초과 가능성 존재
+      AI 예측 :
+      다음달 비용 증가 가능성 존재
     </div>
 
     <div class="detail-item">
-      AI 권장 :
-      차량유지비 우선 통제
+      외주비/유지비 집중 모니터링 권장
     </div>
 
   `;
